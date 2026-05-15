@@ -19,11 +19,57 @@ import re
 import uuid
 from datetime import datetime
 
+import requests
 import streamlit as st
 from dotenv import load_dotenv, find_dotenv
 
 # Cargar .env desde la carpeta del proyecto (busca recursivamente hacia arriba).
 load_dotenv(find_dotenv(usecwd=True))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUPABASE — Guardado de preguntas (no bloqueante, falla silenciosa)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_supabase_config():
+    """Lee la URL y la publishable key de Supabase desde variables de entorno
+    o desde los secrets de Streamlit Cloud."""
+    url = os.getenv("SUPABASE_URL", "")
+    key = os.getenv("SUPABASE_KEY", "")
+    if not url or not key:
+        try:
+            url = url or st.secrets.get("SUPABASE_URL", "")
+            key = key or st.secrets.get("SUPABASE_KEY", "")
+        except (FileNotFoundError, KeyError):
+            pass
+    return url, key
+
+
+def guardar_pregunta(pregunta: str) -> None:
+    """Guarda una pregunta en la tabla `preguntas` de Supabase.
+
+    Diseñada para fallar silenciosamente: si Supabase está caído, mal configurado
+    o sin permisos, el chatbot sigue funcionando con normalidad. El reclutador
+    nunca verá un error por culpa del logging.
+    """
+    url, key = _get_supabase_config()
+    if not url or not key:
+        return  # Sin configuración → no se guarda nada, sin error
+
+    endpoint = f"{url.rstrip('/')}/rest/v1/preguntas"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+    payload = {"pregunta": pregunta}
+
+    try:
+        requests.post(endpoint, json=payload, headers=headers, timeout=3)
+    except Exception:
+        # No bloqueamos la experiencia del usuario por un fallo de logging.
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -51,13 +97,6 @@ st.markdown("""
     }
     .stat-number { font-size: 1.8rem; font-weight: bold; color: #4ade80; }
     .stat-label  { color: #8b8fa8; font-size: 0.8rem; margin-top: 2px; }
-
-    .role-badge {
-        display: inline-block; padding: 4px 12px; border-radius: 20px;
-        font-size: 0.75rem; font-weight: 600;
-        background: #1a2a4a; color: #60a5fa; border: 1px solid #2d5aa0;
-        margin-bottom: 6px;
-    }
 
     .rag-panel {
         background: #0f1923;
@@ -379,17 +418,6 @@ st.caption(
     "Pregúntame sobre la formación, experiencia y perfil profesional de Alejandro."
 )
 
-st.markdown(
-    "<div style='background:#1a1f35;border:1px solid #3d4166;border-radius:10px;"
-    "padding:10px 16px;margin-bottom:16px;'>"
-    "<span class='role-badge'>🎭 Rol activo</span><br>"
-    "<span style='color:#c8cadd;font-size:0.85rem;'>"
-    "Asistente personal de Alejandro Rodríguez · Responde en español · "
-    "Solo usa información verificada de su base de conocimiento"
-    "</span></div>",
-    unsafe_allow_html=True,
-)
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # INICIALIZACIÓN DEL AGENTE
@@ -454,6 +482,9 @@ prompt = st.chat_input("Pregúntame algo sobre Alejandro...") or pregunta_rapida
 if prompt:
     from langchain_core.messages import HumanMessage as HMsg
 
+    # Guardado asíncrono y tolerante a fallos en Supabase (no bloquea la UI)
+    guardar_pregunta(prompt)
+
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -487,3 +518,16 @@ if prompt:
 
             except Exception as e:
                 st.error(f"❌ Error al generar respuesta: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AVISO DE PRIVACIDAD (discreto, en el footer)
+# ─────────────────────────────────────────────────────────────────────────────
+
+st.markdown(
+    "<div style='text-align:center;color:#6b6f8a;font-size:0.72rem;"
+    "margin-top:24px;padding:8px;opacity:0.7;'>"
+    "Las consultas pueden almacenarse de forma anónima para mejorar el asistente."
+    "</div>",
+    unsafe_allow_html=True,
+)
