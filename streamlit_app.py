@@ -63,12 +63,22 @@ def guardar_pregunta(pregunta: str) -> None:
         return
 
     endpoint = f"{url.rstrip('/')}/rest/v1/preguntas"
-    headers = {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal",
-    }
+    # Las publishable keys nuevas (sb_publishable_...) usan SOLO la cabecera apikey,
+    # sin Authorization: Bearer. Detectamos el formato y enviamos las cabeceras adecuadas.
+    if key.startswith("sb_publishable_") or key.startswith("sb_secret_"):
+        headers = {
+            "apikey": key,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
+    else:
+        # Formato antiguo (anon/service_role JWT que empieza por eyJ...)
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
     payload = {"pregunta": pregunta}
 
     # Diagnóstico paso 2: hacer la petición y mostrar el resultado
