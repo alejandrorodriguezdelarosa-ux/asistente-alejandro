@@ -1,0 +1,28 @@
+# Variables de entorno (NUNCA subir a GitHub)
+.env
+.env.local
+
+# ChromaDB persistente — se regenera en cada despliegue
+chroma_db/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
