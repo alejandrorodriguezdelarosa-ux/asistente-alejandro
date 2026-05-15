@@ -48,13 +48,19 @@ def _get_supabase_config():
 def guardar_pregunta(pregunta: str) -> None:
     """Guarda una pregunta en la tabla `preguntas` de Supabase.
 
-    Diseñada para fallar silenciosamente: si Supabase está caído, mal configurado
-    o sin permisos, el chatbot sigue funcionando con normalidad. El reclutador
-    nunca verá un error por culpa del logging.
+    VERSIÓN CON DIAGNÓSTICO TEMPORAL: muestra el resultado en la barra lateral
+    para poder identificar qué falla. Una vez funcione, volvemos a la versión
+    silenciosa.
     """
     url, key = _get_supabase_config()
+
+    # Diagnóstico paso 1: ¿se leen los secrets?
     if not url or not key:
-        return  # Sin configuración → no se guarda nada, sin error
+        st.sidebar.error(
+            f"🔴 DEBUG: Secrets no encontrados. "
+            f"URL={'OK' if url else 'VACÍO'}, KEY={'OK' if key else 'VACÍO'}"
+        )
+        return
 
     endpoint = f"{url.rstrip('/')}/rest/v1/preguntas"
     headers = {
@@ -65,11 +71,19 @@ def guardar_pregunta(pregunta: str) -> None:
     }
     payload = {"pregunta": pregunta}
 
+    # Diagnóstico paso 2: hacer la petición y mostrar el resultado
     try:
-        requests.post(endpoint, json=payload, headers=headers, timeout=3)
-    except Exception:
-        # No bloqueamos la experiencia del usuario por un fallo de logging.
-        pass
+        resp = requests.post(endpoint, json=payload, headers=headers, timeout=5)
+        if resp.status_code in (200, 201, 204):
+            st.sidebar.success(f"🟢 DEBUG: Guardado OK (status {resp.status_code})")
+        else:
+            st.sidebar.error(
+                f"🔴 DEBUG: Supabase devolvió {resp.status_code}. "
+                f"Respuesta: {resp.text[:300]}"
+            )
+    except Exception as e:
+        st.sidebar.error(f"🔴 DEBUG: Excepción al llamar a Supabase: {type(e).__name__}: {e}")
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
